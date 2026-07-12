@@ -13,7 +13,7 @@ const DATA_FILE_PATH = isVercel
 
 const ASSETS_DIR = isVercel
   ? path.join("/tmp", "assets")
-  : path.join(process.cwd(), "assets");
+  : path.join(process.cwd(), "public", "assets");
 
 // Ensure assets directory exists safely
 if (!fs.existsSync(ASSETS_DIR)) {
@@ -109,7 +109,15 @@ async function getSettings(): Promise<ProjectSettings> {
     try {
       const { data, error } = await supabase.from("settings").select("value").eq("id", "project_settings").single();
       if (!error && data && data.value) {
-        return { ...DEFAULT_SETTINGS, ...data.value };
+        const merged = { ...DEFAULT_SETTINGS, ...data.value };
+        // Ensure empty URLs fall back to default assets
+        const assetKeys: (keyof ProjectSettings)[] = ["logoUrl", "mascotUrl", "bannerUrl", "backgroundUrl", "faviconUrl"];
+        assetKeys.forEach(key => {
+          if (!merged[key]) {
+            merged[key] = DEFAULT_SETTINGS[key];
+          }
+        });
+        return merged;
       } else if (error && (error.code === "PGRST116" || error.message?.includes("does not exist"))) {
         // Row or table not found - we try to create it or insert the default settings
         try {
@@ -197,7 +205,6 @@ app.use((req, res, next) => {
 // Serve custom assets folder statically with fallbacks for compiled or source files
 app.use("/assets", express.static(ASSETS_DIR));
 app.use("/assets", express.static(path.join(process.cwd(), "public", "assets")));
-app.use("/assets", express.static(path.join(process.cwd(), "assets")));
 
 // --- API Routes ---
 

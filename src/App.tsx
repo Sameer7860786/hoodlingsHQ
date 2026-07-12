@@ -81,22 +81,22 @@ export default function App() {
     );
   }
 
-  // Fallback in case settings fetch returned null
-  const currentSettings = settings || {
-    followXLink: 'https://x.com/hoodlingsHQ',
-    likeRepostLink: 'https://x.com/i/status/2075618743426928856',
-    isWhitelistOpen: true,
-    chain: 'RobinHood',
-    supply: '8000',
-    mintDate: 'TBA',
-    mintPrice: 'TBA',
-    countdown: 'TBA',
-    logoUrl: '/assets/logo.png?v=2',
-    mascotUrl: '/assets/mascot.png?v=2',
-    bannerUrl: '/assets/banner.png?v=2',
-    backgroundUrl: '/assets/background.png?v=2',
-    faviconUrl: '/assets/favicon.png?v=2',
-    shareWebsiteUrl: window.location.origin,
+  // Merge loaded settings with default values to ensure no empty/missing fields cause broken images
+  const currentSettings = {
+    followXLink: settings?.followXLink || 'https://x.com/hoodlingsHQ',
+    likeRepostLink: settings?.likeRepostLink || 'https://x.com/i/status/2075618743426928856',
+    isWhitelistOpen: settings?.isWhitelistOpen ?? true,
+    chain: settings?.chain || 'RobinHood',
+    supply: settings?.supply || '8000',
+    mintDate: settings?.mintDate || 'TBA',
+    mintPrice: settings?.mintPrice || 'TBA',
+    countdown: settings?.countdown || 'TBA',
+    logoUrl: settings?.logoUrl || '/assets/logo.png?v=2',
+    mascotUrl: settings?.mascotUrl || '/assets/mascot.png?v=2',
+    bannerUrl: settings?.bannerUrl || '/assets/banner.png?v=2',
+    backgroundUrl: settings?.backgroundUrl || '/assets/background.png?v=2',
+    faviconUrl: settings?.faviconUrl || '/assets/favicon.png?v=2',
+    shareWebsiteUrl: settings?.shareWebsiteUrl || window.location.origin,
   };
 
   return (
