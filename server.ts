@@ -71,14 +71,22 @@ function writeLocalData(settings: ProjectSettings, submissions: WhitelistApp[]) 
 // Set up Supabase
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 let supabase: any = null;
 
-if (supabaseUrl && supabaseAnonKey && supabaseUrl !== "YOUR_SUPABASE_URL") {
-  try {
-    supabase = createClient(supabaseUrl, supabaseAnonKey);
-    console.log("Supabase connected with URL:", supabaseUrl);
-  } catch (err) {
-    console.error("Failed to connect to Supabase:", err);
+if (supabaseUrl && supabaseUrl !== "YOUR_SUPABASE_URL") {
+  // Prefer service role key for backend operations to bypass RLS
+  const keyToUse = (supabaseServiceKey && supabaseServiceKey !== "YOUR_SUPABASE_SERVICE_ROLE_KEY" && supabaseServiceKey !== "")
+    ? supabaseServiceKey
+    : supabaseAnonKey;
+
+  if (keyToUse && keyToUse !== "YOUR_SUPABASE_ANON_KEY" && keyToUse !== "") {
+    try {
+      supabase = createClient(supabaseUrl, keyToUse);
+      console.log("Supabase connected with URL:", supabaseUrl, "using key:", supabaseServiceKey ? "service_role" : "anon");
+    } catch (err) {
+      console.error("Failed to connect to Supabase:", err);
+    }
   }
 } else {
   console.log("Supabase credentials not configured. Running with robust local file storage fallback.");
@@ -120,7 +128,7 @@ async function getSettings(): Promise<ProjectSettings> {
 }
 
 // Helper to save settings both to local cache and Supabase
-async function saveSettings(newSettings: ProjectSettings) {
+async function saveSettings(newSettings: ProjectSettings): Promise<{ success: boolean; error?: string }> {
   const currentData = readLocalData();
   writeLocalData(newSettings, currentData.submissions);
 
@@ -129,13 +137,16 @@ async function saveSettings(newSettings: ProjectSettings) {
       const { error } = await supabase.from("settings").upsert({ id: "project_settings", value: newSettings });
       if (error) {
         console.error("Supabase upsert settings error:", error.message);
+        return { success: false, error: "Supabase upsert settings error: " + error.message };
       } else {
         console.log("Successfully saved settings to Supabase!");
       }
     } catch (err: any) {
       console.error("Supabase connection issue during settings upsert:", err.message);
+      return { success: false, error: "Supabase connection issue during settings upsert: " + err.message };
     }
   }
+  return { success: true };
 }
 
 const app = express();
@@ -203,7 +214,10 @@ app.use("/assets", express.static(ASSETS_DIR));
 
     const currentSettings = await getSettings();
     const updatedSettings = { ...currentSettings, ...newSettings };
-    await saveSettings(updatedSettings);
+    const saveResult = await saveSettings(updatedSettings);
+    if (!saveResult.success) {
+      return res.status(500).json({ error: saveResult.error || "Failed to save settings to the database." });
+    }
     res.json({ success: true, settings: updatedSettings });
   });
 
@@ -398,9 +412,10 @@ app.use("/assets", express.static(ASSETS_DIR));
       const matches = base64Data.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
       let buffer: Buffer;
       let extension = "png";
+      let mimeType = "image/png";
 
       if (matches && matches.length === 3) {
-        const mimeType = matches[1];
+        mimeType = matches[1];
         if (mimeType.includes("jpeg") || mimeType.includes("jpg")) {
           extension = "jpg";
         } else if (mimeType.includes("gif")) {
@@ -419,12 +434,51 @@ app.use("/assets", express.static(ASSETS_DIR));
       const fileName = `${assetType}.${extension}`;
       const filePath = path.join(ASSETS_DIR, fileName);
 
-      // Write file
-      fs.writeFileSync(filePath, buffer);
+      // Write file locally as fallback/cache
+      try {
+        fs.writeFileSync(filePath, buffer);
+      } catch (writeErr) {
+        console.warn("Failed to write asset locally:", writeErr);
+      }
+
+      let updatedUrl = `/assets/${fileName}`;
+
+      // If Supabase is connected, we upload to Supabase Storage for permanent persistence
+      if (supabase) {
+        const bucketName = "assets";
+        
+        // Attempt to create the bucket (fails gracefully if it already exists or if we lack permissions)
+        try {
+          await supabase.storage.createBucket(bucketName, { public: true });
+        } catch (bucketErr) {
+          console.log("Bucket check/creation skipped or failed:", bucketErr);
+        }
+
+        // Upload/upsert file to the bucket
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(bucketName)
+          .upload(fileName, buffer, {
+            contentType: mimeType,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          console.error("Supabase Storage upload error:", uploadError.message);
+          return res.status(500).json({ error: "Failed to upload asset to Supabase Storage: " + uploadError.message });
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+        if (urlData && urlData.publicUrl) {
+          updatedUrl = urlData.publicUrl;
+          console.log("Uploaded to Supabase Storage. Public URL:", updatedUrl);
+        } else {
+          return res.status(500).json({ error: "Failed to retrieve public URL from Supabase Storage." });
+        }
+      }
 
       // Update project settings URL
       const currentSettings = await getSettings();
-      const updatedUrl = `/assets/${fileName}`;
       const urlKey = `${assetType}Url` as keyof ProjectSettings;
 
       const updatedSettings = {
@@ -432,9 +486,12 @@ app.use("/assets", express.static(ASSETS_DIR));
         [urlKey]: updatedUrl,
       };
 
-      await saveSettings(updatedSettings);
+      const saveResult = await saveSettings(updatedSettings);
+      if (!saveResult.success) {
+        return res.status(500).json({ error: "Uploaded but failed to update project settings in the database: " + saveResult.error });
+      }
 
-      console.log(`Asset ${assetType} saved to ${updatedUrl}`);
+      console.log(`Asset ${assetType} saved successfully to ${updatedUrl}`);
       res.json({ success: true, url: updatedUrl });
     } catch (err: any) {
       console.error("Asset upload error:", err);

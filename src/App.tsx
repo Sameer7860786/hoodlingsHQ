@@ -34,6 +34,18 @@ export default function App() {
     }
   }, []);
 
+  // Update tab favicon dynamically from settings
+  useEffect(() => {
+    const activeFavicon = settings?.faviconUrl || '/assets/favicon.png';
+    let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.href = activeFavicon;
+  }, [settings]);
+
   // Update settings on server (Admin only)
   const handleUpdateSettings = async (updatedFields: Partial<ProjectSettings>): Promise<boolean> => {
     try {
