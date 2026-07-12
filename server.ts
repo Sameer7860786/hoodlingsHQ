@@ -378,11 +378,13 @@ app.use("/assets", express.static(ASSETS_DIR));
         ]);
         if (error) {
           console.error("Supabase error during insertion:", error.message);
+          return res.status(500).json({ error: "Failed to save submission to Supabase: " + error.message });
         } else {
           console.log("Successfully saved submission to Supabase!");
         }
       } catch (err: any) {
         console.error("Supabase connection issue during insertion:", err.message);
+        return res.status(500).json({ error: "Supabase connection issue during insertion: " + err.message });
       }
     }
 
