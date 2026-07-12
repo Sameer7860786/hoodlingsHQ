@@ -1,9 +1,8 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { createServer as createViteServer } from "vite";
 import { createClient } from "@supabase/supabase-js";
-import { ProjectSettings, WhitelistApp } from "./src/types";
+import { ProjectSettings, WhitelistApp } from "./src/types.js";
 
 // Initialize data file and paths safely for Vercel
 const isVercel = !!process.env.VERCEL;
@@ -447,6 +446,7 @@ app.use("/assets", express.static(ASSETS_DIR));
 
   async function setupViteOrStatic() {
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",
