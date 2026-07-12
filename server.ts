@@ -34,11 +34,11 @@ const DEFAULT_SETTINGS: ProjectSettings = {
   mintDate: "TBA",
   mintPrice: "TBA",
   countdown: "TBA",
-  logoUrl: "/assets/logo.png",
-  mascotUrl: "/assets/mascot.png",
-  bannerUrl: "/assets/banner.png",
-  backgroundUrl: "/assets/background.png",
-  faviconUrl: "/assets/favicon.png",
+  logoUrl: "/assets/logo.png?v=2",
+  mascotUrl: "/assets/mascot.png?v=2",
+  bannerUrl: "/assets/banner.png?v=2",
+  backgroundUrl: "/assets/background.png?v=2",
+  faviconUrl: "/assets/favicon.png?v=2",
   shareWebsiteUrl: "", // We will populate this automatically or let user configure it
   whitelistTimerTarget: "", // ISO target timestamp for 72h timer, if active
 };

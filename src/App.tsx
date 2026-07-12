@@ -36,7 +36,7 @@ export default function App() {
 
   // Update tab favicon dynamically from settings
   useEffect(() => {
-    const activeFavicon = settings?.faviconUrl || '/assets/favicon.png';
+    const activeFavicon = settings?.faviconUrl || '/assets/favicon.png?v=2';
     let link: HTMLLinkElement | null = document.querySelector("link[rel*='icon']");
     if (!link) {
       link = document.createElement('link');
@@ -91,11 +91,11 @@ export default function App() {
     mintDate: 'TBA',
     mintPrice: 'TBA',
     countdown: 'TBA',
-    logoUrl: '/assets/logo.png',
-    mascotUrl: '/assets/mascot.png',
-    bannerUrl: '/assets/banner.png',
-    backgroundUrl: '/assets/background.png',
-    faviconUrl: '/assets/favicon.png',
+    logoUrl: '/assets/logo.png?v=2',
+    mascotUrl: '/assets/mascot.png?v=2',
+    bannerUrl: '/assets/banner.png?v=2',
+    backgroundUrl: '/assets/background.png?v=2',
+    faviconUrl: '/assets/favicon.png?v=2',
     shareWebsiteUrl: window.location.origin,
   };
 
