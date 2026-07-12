@@ -194,8 +194,10 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve custom assets folder statically
+// Serve custom assets folder statically with fallbacks for compiled or source files
 app.use("/assets", express.static(ASSETS_DIR));
+app.use("/assets", express.static(path.join(process.cwd(), "public", "assets")));
+app.use("/assets", express.static(path.join(process.cwd(), "assets")));
 
 // --- API Routes ---
 
