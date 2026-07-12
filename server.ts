@@ -5,13 +5,23 @@ import { createServer as createViteServer } from "vite";
 import { createClient } from "@supabase/supabase-js";
 import { ProjectSettings, WhitelistApp } from "./src/types";
 
-// Initialize data file and paths
-const DATA_FILE_PATH = path.join(process.cwd(), "data.json");
-const ASSETS_DIR = path.join(process.cwd(), "assets");
+// Initialize data file and paths safely for Vercel
+const isVercel = !!process.env.VERCEL;
+const DATA_FILE_PATH = isVercel 
+  ? path.join("/tmp", "data.json") 
+  : path.join(process.cwd(), "data.json");
 
-// Ensure assets directory exists
+const ASSETS_DIR = isVercel
+  ? path.join("/tmp", "assets")
+  : path.join(process.cwd(), "assets");
+
+// Ensure assets directory exists safely
 if (!fs.existsSync(ASSETS_DIR)) {
-  fs.mkdirSync(ASSETS_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(ASSETS_DIR, { recursive: true });
+  } catch (err) {
+    console.error("Failed to create assets directory:", err);
+  }
 }
 
 // Initial settings template
@@ -74,6 +84,60 @@ if (supabaseUrl && supabaseAnonKey && supabaseUrl !== "YOUR_SUPABASE_URL") {
   console.log("Supabase credentials not configured. Running with robust local file storage fallback.");
 }
 
+// Helper to read and cache/merge project settings (with Supabase or Local fallback)
+async function getSettings(): Promise<ProjectSettings> {
+  const localData = readLocalData();
+  
+  // Set default share website URL if empty in localData
+  if (!localData.settings.shareWebsiteUrl) {
+    localData.settings.shareWebsiteUrl = process.env.APP_URL || "https://ais-dev-etqixh2xlcvjy5mfslcme4-196041586240.asia-east1.run.app";
+    // We only write locally if NOT on Vercel to avoid EROFS error on startup
+    if (!isVercel) {
+      writeLocalData(localData.settings, localData.submissions);
+    }
+  }
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from("settings").select("value").eq("id", "project_settings").single();
+      if (!error && data && data.value) {
+        return { ...DEFAULT_SETTINGS, ...data.value };
+      } else if (error && (error.code === "PGRST116" || error.message?.includes("does not exist"))) {
+        // Row or table not found - we try to create it or insert the default settings
+        try {
+          await supabase.from("settings").upsert([{ id: "project_settings", value: localData.settings }]);
+        } catch (upsertErr) {
+          console.warn("Supabase initial settings insert issue:", upsertErr);
+        }
+      } else {
+        console.warn("Supabase load settings issue:", error?.message);
+      }
+    } catch (err: any) {
+      console.warn("Supabase load settings connection error:", err.message);
+    }
+  }
+  return localData.settings;
+}
+
+// Helper to save settings both to local cache and Supabase
+async function saveSettings(newSettings: ProjectSettings) {
+  const currentData = readLocalData();
+  writeLocalData(newSettings, currentData.submissions);
+
+  if (supabase) {
+    try {
+      const { error } = await supabase.from("settings").upsert({ id: "project_settings", value: newSettings });
+      if (error) {
+        console.error("Supabase upsert settings error:", error.message);
+      } else {
+        console.log("Successfully saved settings to Supabase!");
+      }
+    } catch (err: any) {
+      console.error("Supabase connection issue during settings upsert:", err.message);
+    }
+  }
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -84,33 +148,24 @@ app.use(express.urlencoded({ limit: "15mb", extended: true }));
 // Serve custom assets folder statically
 app.use("/assets", express.static(ASSETS_DIR));
 
-// Initialize DB JSON file if it doesn't exist
-const initialData = readLocalData();
-
-// Set default share website URL if empty
-if (!initialData.settings.shareWebsiteUrl) {
-  initialData.settings.shareWebsiteUrl = process.env.APP_URL || "https://ais-dev-etqixh2xlcvjy5mfslcme4-196041586240.asia-east1.run.app";
-  writeLocalData(initialData.settings, initialData.submissions);
-}
-
 // --- API Routes ---
 
   // Get project settings
-  app.get("/api/settings", (req, res) => {
-    const data = readLocalData();
-    res.json(data.settings);
+  app.get("/api/settings", async (req, res) => {
+    const settings = await getSettings();
+    res.json(settings);
   });
 
   // Update project settings
-  app.post("/api/settings", (req, res) => {
+  app.post("/api/settings", async (req, res) => {
     const { password, settings: newSettings } = req.body;
     if (password !== "Sameer@786") {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const currentData = readLocalData();
-    const updatedSettings = { ...currentData.settings, ...newSettings };
-    writeLocalData(updatedSettings, currentData.submissions);
+    const currentSettings = await getSettings();
+    const updatedSettings = { ...currentSettings, ...newSettings };
+    await saveSettings(updatedSettings);
     res.json({ success: true, settings: updatedSettings });
   });
 
@@ -125,10 +180,33 @@ if (!initialData.settings.shareWebsiteUrl) {
   });
 
   // Get all submissions (Admin view)
-  app.get("/api/submissions", (req, res) => {
+  app.get("/api/submissions", async (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader !== "Sameer@786" && req.query.password !== "Sameer@786") {
       return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("submissions")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (!error && data) {
+          const mapped = data.map((row: any) => ({
+            id: row.id,
+            username: row.username,
+            wallet: row.wallet,
+            status: row.status || "pending",
+            createdAt: row.created_at || row.createdAt,
+          }));
+          return res.json(mapped);
+        } else {
+          console.error("Supabase select submissions error:", error?.message);
+        }
+      } catch (err: any) {
+        console.error("Supabase connection issue during submissions fetch:", err.message);
+      }
     }
 
     const data = readLocalData();
@@ -136,15 +214,30 @@ if (!initialData.settings.shareWebsiteUrl) {
   });
 
   // Delete submission (Admin action)
-  app.post("/api/submissions/delete", (req, res) => {
+  app.post("/api/submissions/delete", async (req, res) => {
     const { password, id } = req.body;
     if (password !== "Sameer@786") {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
+    const settings = await getSettings();
     const data = readLocalData();
     const updatedSubmissions = data.submissions.filter((s) => s.id !== id);
-    writeLocalData(data.settings, updatedSubmissions);
+    writeLocalData(settings, updatedSubmissions);
+
+    if (supabase) {
+      try {
+        const { error } = await supabase.from("submissions").delete().eq("id", id);
+        if (error) {
+          console.error("Supabase delete submission error:", error.message);
+        } else {
+          console.log("Successfully deleted submission from Supabase!");
+        }
+      } catch (err: any) {
+        console.error("Supabase connection issue during deletion:", err.message);
+      }
+    }
+
     res.json({ success: true });
   });
 
@@ -162,25 +255,45 @@ if (!initialData.settings.shareWebsiteUrl) {
       return res.status(400).json({ error: "Invalid EVM wallet address format." });
     }
 
-    const data = readLocalData();
+    const settings = await getSettings();
 
     // Check if 72-hour timer is running and has expired
-    if (data.settings.whitelistTimerTarget) {
-      const isExpired = new Date().getTime() > new Date(data.settings.whitelistTimerTarget).getTime();
+    if (settings.whitelistTimerTarget) {
+      const isExpired = new Date().getTime() > new Date(settings.whitelistTimerTarget).getTime();
       if (isExpired) {
         return res.status(403).json({ error: "The 72-hour whitelist application timer has expired. Applications are closed." });
       }
     }
 
     // Check if whitelist is currently closed
-    if (!data.settings.isWhitelistOpen) {
+    if (!settings.isWhitelistOpen) {
       return res.status(403).json({ error: "The whitelist application is currently closed." });
     }
 
-    // Check for duplicate wallet or username
-    const duplicate = data.submissions.find(
-      (s) => s.wallet.toLowerCase() === wallet.toLowerCase() || s.username.toLowerCase() === username.toLowerCase()
-    );
+    // Check for duplicate wallet or username in Supabase
+    let duplicate = false;
+    if (supabase) {
+      try {
+        const { data: dbSubmissions, error } = await supabase
+          .from("submissions")
+          .select("id")
+          .or(`wallet.ilike.${wallet},username.ilike.${username}`);
+        if (!error && dbSubmissions && dbSubmissions.length > 0) {
+          duplicate = true;
+        }
+      } catch (err: any) {
+        console.error("Supabase duplicate check issue:", err.message);
+      }
+    }
+
+    // Fallback to checking local data if duplicate not found yet
+    if (!duplicate) {
+      const data = readLocalData();
+      const localDuplicate = data.submissions.find(
+        (s) => s.wallet.toLowerCase() === wallet.toLowerCase() || s.username.toLowerCase() === username.toLowerCase()
+      );
+      if (localDuplicate) duplicate = true;
+    }
 
     if (duplicate) {
       return res.status(400).json({ error: "This wallet address or X username has already applied." });
@@ -195,8 +308,9 @@ if (!initialData.settings.shareWebsiteUrl) {
     };
 
     // Save locally
+    const data = readLocalData();
     data.submissions.unshift(newApp);
-    writeLocalData(data.settings, data.submissions);
+    writeLocalData(settings, data.submissions);
 
     // Save to Supabase if configured
     if (supabase) {
@@ -224,7 +338,7 @@ if (!initialData.settings.shareWebsiteUrl) {
   });
 
   // Upload or replace asset
-  app.post("/api/upload-asset", (req, res) => {
+  app.post("/api/upload-asset", async (req, res) => {
     const { password, assetType, base64Data } = req.body;
 
     if (password !== "Sameer@786") {
@@ -271,16 +385,16 @@ if (!initialData.settings.shareWebsiteUrl) {
       fs.writeFileSync(filePath, buffer);
 
       // Update project settings URL
-      const data = readLocalData();
+      const currentSettings = await getSettings();
       const updatedUrl = `/assets/${fileName}`;
       const urlKey = `${assetType}Url` as keyof ProjectSettings;
 
       const updatedSettings = {
-        ...data.settings,
+        ...currentSettings,
         [urlKey]: updatedUrl,
       };
 
-      writeLocalData(updatedSettings, data.submissions);
+      await saveSettings(updatedSettings);
 
       console.log(`Asset ${assetType} saved to ${updatedUrl}`);
       res.json({ success: true, url: updatedUrl });
