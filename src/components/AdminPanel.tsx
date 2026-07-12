@@ -10,9 +10,10 @@ interface AdminPanelProps {
   settings: ProjectSettings;
   onUpdateSettings: (newSettings: Partial<ProjectSettings>) => Promise<boolean>;
   onClose: () => void;
+  onAuthenticated?: (password: string) => void;
 }
 
-export default function AdminPanel({ settings, onUpdateSettings, onClose }: AdminPanelProps) {
+export default function AdminPanel({ settings, onUpdateSettings, onClose, onAuthenticated }: AdminPanelProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -162,6 +163,9 @@ export default function AdminPanel({ settings, onUpdateSettings, onClose }: Admi
       if (response.ok && data.success) {
         setIsAuthenticated(true);
         loadSubmissions(password);
+        if (onAuthenticated) {
+          onAuthenticated(password);
+        }
       } else {
         setLoginError(data.error || 'Incorrect password.');
       }

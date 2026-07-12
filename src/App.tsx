@@ -10,6 +10,7 @@ export default function App() {
   const [route, setRoute] = useState<'home' | 'apply' | 'admin'>('home');
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [adminPassword, setAdminPassword] = useState<string>('Sameer@786');
 
   // Load project settings on mount
   useEffect(() => {
@@ -42,7 +43,7 @@ export default function App() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          password: 'Sameer@786', // Protected admin password
+          password: adminPassword, // Dynamic admin password from state
           settings: updatedFields,
         }),
       });
@@ -147,6 +148,7 @@ export default function App() {
               window.history.pushState({}, '', '/');
               setRoute('home');
             }}
+            onAuthenticated={(pwd) => setAdminPassword(pwd)}
           />
         )}
       </div>

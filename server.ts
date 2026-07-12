@@ -7,6 +7,7 @@ import { ProjectSettings, WhitelistApp } from "./src/types";
 
 // Initialize data file and paths safely for Vercel
 const isVercel = !!process.env.VERCEL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Sameer@786";
 const DATA_FILE_PATH = isVercel 
   ? path.join("/tmp", "data.json") 
   : path.join(process.cwd(), "data.json");
@@ -145,6 +146,44 @@ const PORT = 3000;
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
+// --- Robust Vercel Routing Middleware ---
+app.use((req, res, next) => {
+  console.log(`[Vercel Routing] Incoming request: ${req.method} ${req.url}`);
+  
+  // If req.url starts with /api/server, strip the /server or /server.ts/server.js part
+  if (req.url.startsWith("/api/server")) {
+    let remaining = req.url.substring("/api/server".length);
+    if (remaining.startsWith(".ts")) {
+      remaining = remaining.substring(3);
+    } else if (remaining.startsWith(".js")) {
+      remaining = remaining.substring(3);
+    }
+    
+    if (remaining.startsWith("/")) {
+      req.url = "/api" + remaining;
+    } else if (remaining.startsWith("?")) {
+      req.url = "/api" + remaining;
+    } else if (remaining === "") {
+      req.url = "/api";
+    }
+  }
+
+  // Handle case where Vercel rewrites path wildcard to a query parameter 'path'
+  if (req.query && typeof req.query.path === "string") {
+    const pathVal = req.query.path;
+    if (pathVal.startsWith("api/")) {
+      req.url = "/" + pathVal;
+    } else if (pathVal.startsWith("/")) {
+      req.url = "/api" + pathVal;
+    } else {
+      req.url = "/api/" + pathVal;
+    }
+  }
+
+  console.log(`[Vercel Routing] Handled URL: ${req.url}`);
+  next();
+});
+
 // Serve custom assets folder statically
 app.use("/assets", express.static(ASSETS_DIR));
 
@@ -159,7 +198,7 @@ app.use("/assets", express.static(ASSETS_DIR));
   // Update project settings
   app.post("/api/settings", async (req, res) => {
     const { password, settings: newSettings } = req.body;
-    if (password !== "Sameer@786") {
+    if (password !== ADMIN_PASSWORD) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -172,7 +211,7 @@ app.use("/assets", express.static(ASSETS_DIR));
   // Admin login check
   app.post("/api/admin/login", (req, res) => {
     const { password } = req.body;
-    if (password === "Sameer@786") {
+    if (password === ADMIN_PASSWORD) {
       res.json({ success: true, token: "session_valid_token_786" });
     } else {
       res.status(401).json({ error: "Invalid password" });
@@ -182,7 +221,7 @@ app.use("/assets", express.static(ASSETS_DIR));
   // Get all submissions (Admin view)
   app.get("/api/submissions", async (req, res) => {
     const authHeader = req.headers.authorization;
-    if (authHeader !== "Sameer@786" && req.query.password !== "Sameer@786") {
+    if (authHeader !== ADMIN_PASSWORD && req.query.password !== ADMIN_PASSWORD) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -216,7 +255,7 @@ app.use("/assets", express.static(ASSETS_DIR));
   // Delete submission (Admin action)
   app.post("/api/submissions/delete", async (req, res) => {
     const { password, id } = req.body;
-    if (password !== "Sameer@786") {
+    if (password !== ADMIN_PASSWORD) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
@@ -341,7 +380,7 @@ app.use("/assets", express.static(ASSETS_DIR));
   app.post("/api/upload-asset", async (req, res) => {
     const { password, assetType, base64Data } = req.body;
 
-    if (password !== "Sameer@786") {
+    if (password !== ADMIN_PASSWORD) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
