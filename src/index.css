@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-neon-lime: #D0E94C;
+  --color-neon-lime-hover: #b9d134;
+  --color-lime-glow: rgba(208, 233, 76, 0.15);
+  --color-lime-glow-strong: rgba(208, 233, 76, 0.35);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  body {
+    background-color: #000000;
+    color: #f3f4f6;
+    font-family: var(--font-sans);
+    overflow-x: hidden;
+  }
+
+  /* Custom subtle scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1f2937;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #D0E94C;
+  }
+}
+
+/* Custom CSS utilities for premium pixel-art/cyberpunk feel */
+.pixel-border {
+  border: 2px solid #D0E94C;
+  box-shadow: 
+    0 4px 0 -2px #000000, 
+    4px 0 0 -2px #000000, 
+    0 -4px 0 -2px #000000, 
+    -4px 0 0 -2px #000000,
+    0 0 15px rgba(208, 233, 76, 0.3);
+}
+
+.pixel-card {
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(208, 233, 76, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.pixel-card:hover {
+  border-color: rgba(208, 233, 76, 0.35);
+  box-shadow: 0 12px 40px 0 rgba(208, 233, 76, 0.08);
+}
+
+.neon-glow-text {
+  text-shadow: 0 0 10px rgba(208, 233, 76, 0.6);
+}
+
+.neon-glow-btn {
+  box-shadow: 0 0 20px rgba(208, 233, 76, 0.25);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.neon-glow-btn:hover {
+  box-shadow: 0 0 30px rgba(208, 233, 76, 0.5);
+  transform: translateY(-1px);
+}
+
+/* Float Animation */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float-slow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-15px) rotate(-1deg);
+  }
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+/* Pixel particle animation */
+@keyframes particle-rise {
+  0% {
+    transform: translateY(100vh) translateX(0px) scale(1);
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(-10vh) translateX(var(--tx)) scale(0.5);
+    opacity: 0;
+  }
+}
+
+.pixel-particle {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  background-color: #D0E94C;
+  opacity: 0;
+  pointer-events: none;
+}

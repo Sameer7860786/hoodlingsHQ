@@ -1,0 +1,6 @@
+{
+  "name": "HoodLings Whitelist",
+  "description": "Modern, premium NFT whitelist application portal for HoodLings, dwelling on RobinHood network.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
