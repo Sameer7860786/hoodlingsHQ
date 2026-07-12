@@ -74,27 +74,26 @@ if (supabaseUrl && supabaseAnonKey && supabaseUrl !== "YOUR_SUPABASE_URL") {
   console.log("Supabase credentials not configured. Running with robust local file storage fallback.");
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+const PORT = 3000;
 
-  // Set high limit for body parser to allow base64 image upload
-  app.use(express.json({ limit: "15mb" }));
-  app.use(express.urlencoded({ limit: "15mb", extended: true }));
+// Set high limit for body parser to allow base64 image upload
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
-  // Serve custom assets folder statically
-  app.use("/assets", express.static(ASSETS_DIR));
+// Serve custom assets folder statically
+app.use("/assets", express.static(ASSETS_DIR));
 
-  // Initialize DB JSON file if it doesn't exist
-  let { settings, submissions } = readLocalData();
-  
-  // Set default share website URL if empty
-  if (!settings.shareWebsiteUrl) {
-    settings.shareWebsiteUrl = process.env.APP_URL || "https://ais-dev-etqixh2xlcvjy5mfslcme4-196041586240.asia-east1.run.app";
-    writeLocalData(settings, submissions);
-  }
+// Initialize DB JSON file if it doesn't exist
+const initialData = readLocalData();
 
-  // --- API Routes ---
+// Set default share website URL if empty
+if (!initialData.settings.shareWebsiteUrl) {
+  initialData.settings.shareWebsiteUrl = process.env.APP_URL || "https://ais-dev-etqixh2xlcvjy5mfslcme4-196041586240.asia-east1.run.app";
+  writeLocalData(initialData.settings, initialData.submissions);
+}
+
+// --- API Routes ---
 
   // Get project settings
   app.get("/api/settings", (req, res) => {
@@ -293,23 +292,29 @@ async function startServer() {
 
   // --- Vite Middleware or Static Production Build ---
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+  async function setupViteOrStatic() {
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    }
+  }
+
+  if (!process.env.VERCEL) {
+    setupViteOrStatic().then(() => {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`HoodLings full-stack server listening on http://0.0.0.0:${PORT}`);
+      });
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`HoodLings full-stack server listening on http://0.0.0.0:${PORT}`);
-  });
-}
-
-startServer();
+export { app };
+export default app;
